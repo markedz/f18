@@ -205,7 +205,18 @@ Expr<Type<TypeCategory::Integer, KIND>> FoldOperation(
   return Expr<IntKIND>{std::move(inquiry)};
 }
 
-// TODO: Fold/rewrite intrinsic function references
+// TODO: Fold/rewrite intrinsic function references: draft below
+template<typename T>
+Expr<T> FoldOperation(FoldingContext &context, FunctionRef<T> &&functionRef) {
+  // TODO so far only if scalar constant arguments
+  //  -> Constant<T> is scalar anyway
+  if constexpr (IsSpecificIntrinsicType<T>) {
+    if (std::optional<Constant<T>> folded{functionRef.Fold(context)}) {
+      return Expr<T>{std::move(*folded)};
+    }
+  }
+  return Expr<T>{std::move(functionRef)};
+}
 
 // Unary operations
 

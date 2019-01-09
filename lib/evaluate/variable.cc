@@ -14,6 +14,7 @@
 
 #include "variable.h"
 #include "fold.h"
+#include "rte-bindings.h"
 #include "tools.h"
 #include "../common/idioms.h"
 #include "../parser/char-block.h"
@@ -671,6 +672,56 @@ bool ComplexPart::operator==(const ComplexPart &that) const {
 bool ProcedureRef::operator==(const ProcedureRef &that) const {
   return proc_ == that.proc_ && arguments_ == that.arguments_;
 }
+
+// TODO find a better place. Should not be a global
+static Fortran::evaluate::rte::RuntimeFunctionMap rteMap{};
+
+template<typename T>
+std::optional<Constant<T>> FunctionRef<T>::Fold(FoldingContext &context) {
+  // TODO: Support Folding over arrays (need ArrayConstructor first)
+  if (Rank() > 0) {
+    return std::nullopt;
+  }
+  if (auto intrinsic = std::get_if<SpecificIntrinsic>(&proc_.u)) {
+    std::vector<Fortran::evaluate::SomeHostType> hostArgs{};
+    for (auto const &arg : arguments_) {
+      if (!arg.has_value()) {
+        return std::nullopt;  // TODO: Handle default arg.
+      } else {
+        // The following assumes arg have already be folding. TODO: ensure it
+        // (it seems to be true)
+        if (auto x{Fortran::evaluate::rte::ConvertToHostTypeIfConstant(
+                *arg->value)}) {
+          hostArgs.emplace_back(std::move(*x));
+        } else {
+          return std::nullopt;
+        }
+      }
+    }
+
+    Fortran::evaluate::rte::RteFunctionRef<HostType<T>> call{
+        std::string{intrinsic->name},
+        std::vector<Fortran::evaluate::SomeHostType>(hostArgs)};
+    if (auto fun{rteMap.find(call)}) {
+      return std::visit(
+          [&call](auto &fun) -> std::optional<Constant<T>> {
+            auto result = fun.Call(call.args);
+            using R = std::decay_t<decltype(result)>;
+            if constexpr (std::is_same_v<R, HostType<T>>) {
+              return Fortran::evaluate::rte::ConvertFromHostType<T>(result);
+            } else {
+              return std::nullopt;
+            }
+          },
+          (*fun)->symbol);
+    }
+    context.messages.Say(
+        "TODO: folding not yet implemented for this intrinsic"_en_US);
+  }
+  return std::nullopt;
+}
+
+FOR_EACH_INTRINSIC_KIND(template class FunctionRef)
 
 EXPAND_FOR_EACH_INTEGER_KIND(
     TEMPLATE_INSTANTIATION, template struct TypeParamInquiry)
