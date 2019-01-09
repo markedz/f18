@@ -964,16 +964,16 @@ public:
 
   std::optional<SomeHostType> ConvertToHostType() const {
     if constexpr (BITS == 8) {
-      auto *x{reinterpret_cast<const signed char*>(part_)};
+      auto *x{reinterpret_cast<const signed char *>(part_)};
       return *x;
     } else if constexpr (BITS == 16 && sizeof(short) == 2) {
-      auto *x{reinterpret_cast<const short*>(part_)};
+      auto *x{reinterpret_cast<const short *>(part_)};
       return *x;
     } else if constexpr (BITS == 32 && sizeof(int) == 4) {
-      auto *x{reinterpret_cast<const int*>(part_)};
+      auto *x{reinterpret_cast<const int *>(part_)};
       return *x;
     } else if constexpr (BITS == 64 && sizeof(long long int) == 8) {
-      auto *x{reinterpret_cast<const long long int*>(part_)};
+      auto *x{reinterpret_cast<const long long int *>(part_)};
       return *x;
     } else {
       return std::nullopt;
