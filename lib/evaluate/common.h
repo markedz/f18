@@ -202,5 +202,9 @@ struct FoldingContext {
 };
 
 void RealFlagWarnings(FoldingContext &, const RealFlags &, const char *op);
+
+struct UnknowHostType {};
+struct VoidHostType {}; //void is not allowed in variant
+using SomeHostType = std::variant<UnknowHostType, VoidHostType, float, double, signed char, char, short, int, long long int, size_t, int*, float*, void*, double*, char*, char**>;
 }
 #endif  // FORTRAN_EVALUATE_COMMON_H_

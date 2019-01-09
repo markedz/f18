@@ -459,6 +459,19 @@ std::ostream &Real<W, P, IM>::AsFortran(
   return o;
 }
 
+template<typename W, int P, bool IM>
+std::optional<SomeHostType> Real<W, P, IM>::ConvertToHostType() const {
+  if constexpr (std::is_same_v<W, Integer<32>>) {
+    auto *x{reinterpret_cast<const float*>(&word_)};
+    return *x;
+  } else if constexpr (std::is_same_v<W, Integer<64>>) {
+    auto *x{reinterpret_cast<const double*>(&word_)};
+    return *x;
+  } else {
+    return std::nullopt;
+  }
+}
+
 template class Real<Integer<16>, 11>;
 template class Real<Integer<16>, 8>;
 template class Real<Integer<32>, 24>;

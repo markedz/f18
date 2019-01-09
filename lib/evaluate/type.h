@@ -372,5 +372,45 @@ template<typename T> struct Constant {
 
   Value value;
 };
+
+template<typename T>
+struct HostTypeHelper {
+  using type = UnknowHostType;
+};
+template<>
+struct HostTypeHelper<Type<TypeCategory::Real, 4>> {
+  using type = float;
+  static_assert(sizeof(type)==4);
+};
+template<>
+struct HostTypeHelper<Type<TypeCategory::Real, 8>> {
+  using type = double;
+  static_assert(sizeof(type)==8);
+};
+template<>
+struct HostTypeHelper<Type<TypeCategory::Integer, 1>> {
+  using type = signed char;
+};
+
+template<>
+struct HostTypeHelper<Type<TypeCategory::Integer, 2>> {
+  using type = short;
+  static_assert(sizeof(type)==2);
+};
+template<>
+struct HostTypeHelper<Type<TypeCategory::Integer, 4>> {
+  using type = int;
+  static_assert(sizeof(type)==4); //wrong on Win16 API
+};
+
+template<>
+struct HostTypeHelper<Type<TypeCategory::Integer, 8>> {
+  using type = long long int;
+  static_assert(sizeof(type)==8);
+};
+
+template<typename T>
+using HostType = typename HostTypeHelper<T>::type;
+
 }
 #endif  // FORTRAN_EVALUATE_TYPE_H_

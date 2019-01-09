@@ -207,6 +207,8 @@ public:
     return result;
   }
 
+  std::optional<SomeHostType> ConvertToHostType() const;
+
   template<typename INT> constexpr ValueWithRealFlags<INT> ToInteger() const {
     ValueWithRealFlags<INT> result;
     if (IsNotANumber()) {
