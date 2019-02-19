@@ -283,7 +283,7 @@ protected:
   const DeclTypeSpec *GetDeclTypeSpec();
   void BeginDeclTypeSpec();
   void EndDeclTypeSpec();
-  State SetDeclTypeSpecState(State);
+  State SetDeclTypeSpecState(State &&);
   void SetDeclTypeSpec(const DeclTypeSpec &);
   void SetDeclTypeSpecCategory(DeclTypeSpec::Category);
   DeclTypeSpec::Category GetDeclTypeSpecCategory() const {
@@ -1164,9 +1164,10 @@ void DeclTypeSpecVisitor::EndDeclTypeSpec() {
   state_ = {};
 }
 
-DeclTypeSpecVisitor::State DeclTypeSpecVisitor::SetDeclTypeSpecState(State x) {
-  auto result{state_};
-  state_ = x;
+DeclTypeSpecVisitor::State DeclTypeSpecVisitor::SetDeclTypeSpecState(
+    State &&x) {
+  auto result{std::move(state_)};
+  state_ = std::move(x);
   return result;
 }
 
@@ -3142,7 +3143,7 @@ bool DeclarationVisitor::Pre(const parser::StructureConstructor &x) {
   Walk(parsedType);
   const DeclTypeSpec *type{GetDeclTypeSpec()};
   EndDeclTypeSpec();
-  SetDeclTypeSpecState(savedState);
+  SetDeclTypeSpecState(std::move(savedState));
 
   if (type == nullptr) {
     return false;
@@ -3587,7 +3588,7 @@ bool ConstructVisitor::Pre(const parser::AcSpec &x) {
   BeginDeclTypeSpec();
   Walk(x.type);
   EndDeclTypeSpec();
-  SetDeclTypeSpecState(savedState);
+  SetDeclTypeSpecState(std::move(savedState));
   PushScope(Scope::Kind::ImpliedDos, nullptr);
   Walk(x.values);
   PopScope();

@@ -91,25 +91,33 @@ namespace Fortran::evaluate {
 
 bool DynamicType::operator==(const DynamicType &that) const {
   return category == that.category && kind == that.kind &&
-      derived == that.derived;
+      ((derived == nullptr && that.derived == nullptr) ||
+          (derived != nullptr && that.derived != nullptr &&
+              *derived == *that.derived));
+}
+
+std::optional<DynamicType> GetSymbolType(const semantics::Symbol &symbol) {
+  if (const auto *type{symbol.GetType()}) {
+    if (const auto *intrinsic{type->AsIntrinsic()}) {
+      if (auto kind{ToInt64(intrinsic->kind())}) {
+        TypeCategory category{intrinsic->category()};
+        if (IsValidKindOfIntrinsicType(category, *kind)) {
+          return DynamicType{category, static_cast<int>(*kind)};
+        }
+      }
+    } else if (const auto *derived{type->AsDerived()}) {
+      return DynamicType{TypeCategory::Derived, 0, derived};
+    }
+  }
+  return std::nullopt;
 }
 
 std::optional<DynamicType> GetSymbolType(const semantics::Symbol *symbol) {
   if (symbol != nullptr) {
-    if (const auto *type{symbol->GetType()}) {
-      if (const auto *intrinsic{type->AsIntrinsic()}) {
-        if (auto kind{ToInt64(intrinsic->kind())}) {
-          TypeCategory category{intrinsic->category()};
-          if (IsValidKindOfIntrinsicType(category, *kind)) {
-            return DynamicType{category, static_cast<int>(*kind)};
-          }
-        }
-      } else if (const auto *derived{type->AsDerived()}) {
-        return DynamicType{TypeCategory::Derived, 0, derived};
-      }
-    }
+    return GetSymbolType(*symbol);
+  } else {
+    return std::nullopt;
   }
-  return std::nullopt;
 }
 
 std::string DynamicType::AsFortran() const {
