@@ -1151,9 +1151,9 @@ std::optional<SpecificCall> IntrinsicInterface::Match(
     }
   }
 
-  return {SpecificCall{
+  return std::make_optional<SpecificCall>(
       SpecificIntrinsic{name, std::move(resultType), resultRank, attrs},
-      std::move(rearranged)}};
+      std::move(rearranged));
 }
 
 struct IntrinsicProcTable::Implementation {
@@ -1218,9 +1218,9 @@ std::optional<SpecificCall> IntrinsicProcTable::Implementation::Probe(
   // Special cases of intrinsic functions
   if (call.name.ToString() == "null") {
     if (arguments.size() == 0) {
-      // TODO: NULL() result type is determined by context
-      // Can pass that context in, or return a token distinguishing
-      // NULL, or represent NULL as a new kind of top-level expression
+      return std::make_optional<SpecificCall>(
+          SpecificIntrinsic{"null"s}, std::move(arguments));
+      // TODO pmk work in progress - fold into NullPointer (where?)
     } else if (arguments.size() > 1) {
       genericErrors.Say("too many arguments to NULL()"_err_en_US);
     } else if (arguments[0].has_value() && arguments[0]->keyword.has_value() &&
@@ -1228,10 +1228,16 @@ std::optional<SpecificCall> IntrinsicProcTable::Implementation::Probe(
       genericErrors.Say("unknown argument '%s' to NULL()"_err_en_US,
           arguments[0]->keyword->ToString().data());
     } else {
-      // TODO: Argument must be pointer, procedure pointer, or allocatable.
-      // Characteristics, including dynamic length type parameter values,
-      // must be taken from the MOLD argument.
-      // TODO: set Attr::POINTER on NULL result
+      Expr<SomeType> &mold{*arguments[0]->value};
+      if (IsPointerOrAllocatable(mold)) {
+        return std::make_optional<SpecificCall>(
+            SpecificIntrinsic{"null"s, mold.GetType(), mold.Rank(),
+                semantics::Attrs{semantics::Attr::POINTER}},
+            std::move(arguments));
+      } else {
+        genericErrors.Say("MOLD argument to NULL() must be a pointer "
+                          "or allocatable"_err_en_US);
+      }
     }
   }
   // No match
