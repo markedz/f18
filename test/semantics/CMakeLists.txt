@@ -71,6 +71,7 @@ set(ERROR_TESTS
   resolve43.f90
   resolve44.f90
   structconst01.f90
+  structconst02.f90
 )
 
 # These test files have expected symbols in the source
