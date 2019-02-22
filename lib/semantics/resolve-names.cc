@@ -375,6 +375,9 @@ private:
 // Manage a stack of Scopes
 class ScopeHandler : public ImplicitRulesVisitor {
 public:
+  using ImplicitRulesVisitor::Post;
+  using ImplicitRulesVisitor::Pre;
+
   Scope &currScope() { return *currScope_; }
   // The enclosing scope, skipping blocks and derived types.
   Scope &InclusiveScope();
@@ -619,6 +622,8 @@ class DeclarationVisitor : public ArraySpecVisitor,
 public:
   using ArraySpecVisitor::Post;
   using ArraySpecVisitor::Pre;
+  using ScopeHandler::Post;
+  using ScopeHandler::Pre;
 
   void Post(const parser::EntityDecl &);
   void Post(const parser::ObjectDecl &);
@@ -656,6 +661,7 @@ public:
   void Post(const parser::IntrinsicTypeSpec::Complex &);
   void Post(const parser::IntrinsicTypeSpec::Logical &);
   void Post(const parser::IntrinsicTypeSpec::Character &);
+  void Post(const parser::IntrinsicTypeSpec::NCharacter &);
   void Post(const parser::CharSelector::LengthAndKind &);
   void Post(const parser::CharLength &);
   void Post(const parser::LengthSelector &);
@@ -679,6 +685,7 @@ public:
   void Post(const parser::ProcedureDeclarationStmt &);
   bool Pre(const parser::ProcComponentDefStmt &);
   void Post(const parser::ProcComponentDefStmt &);
+  bool Pre(const parser::ProcInterface &x);
   void Post(const parser::ProcInterface &x);
   void Post(const parser::ProcDecl &x);
   bool Pre(const parser::TypeBoundProcedurePart &);
@@ -2652,6 +2659,15 @@ void DeclarationVisitor::Post(const parser::IntrinsicTypeSpec::Character &x) {
       std::move(*charInfo_.length), std::move(*charInfo_.kind)));
   charInfo_ = {};
 }
+void DeclarationVisitor::Post(const parser::IntrinsicTypeSpec::NCharacter &x) {
+  if (!charInfo_.length) {
+    charInfo_.length = ParamValue{1};
+  }
+  CHECK(!charInfo_.kind.has_value());
+  SetDeclTypeSpec(currScope().MakeCharacterType(
+      std::move(*charInfo_.length), KindExpr{2 /* EUC_JP */}));
+  charInfo_ = {};
+}
 void DeclarationVisitor::Post(const parser::CharSelector::LengthAndKind &x) {
   charInfo_.kind = EvaluateSubscriptIntExpr(x.kind);
   if (x.length) {
@@ -2988,6 +3004,48 @@ bool DeclarationVisitor::Pre(const parser::ProcComponentDefStmt &) {
 void DeclarationVisitor::Post(const parser::ProcComponentDefStmt &) {
   interfaceName_ = nullptr;
 }
+bool DeclarationVisitor::Pre(const parser::ProcInterface &x) {
+  if (auto *name{std::get_if<parser::Name>(&x.u)}) {
+    if (const Symbol * symbol{FindSymbol(*name)}) {
+      if (symbol->HasExplicitInterface()) {
+        return true;
+      }
+    }
+    // Simple names (lacking parameters and size) of intrinsic types re
+    // ambiguous in Fortran when used as instances of proc-interface.
+    // The parser recognizes them as interface-names since they can be
+    // overridden.  When they turn out (here) to not be names of explicit
+    // interfaces, we need to replace their parses.
+    auto &proc{const_cast<parser::ProcInterface &>(x)};
+    if (name->source == "integer"s) {
+      proc.u = parser::IntrinsicTypeSpec{parser::IntegerTypeSpec{std::nullopt}};
+    } else if (name->source == "real") {
+      proc.u = parser::IntrinsicTypeSpec{
+          parser::IntrinsicTypeSpec::Real{std::nullopt}};
+    } else if (name->source == "doubleprecision") {
+      proc.u = parser::IntrinsicTypeSpec{
+          parser::IntrinsicTypeSpec::DoublePrecision{}};
+    } else if (name->source == "complex") {
+      proc.u = parser::IntrinsicTypeSpec{
+          parser::IntrinsicTypeSpec::Complex{std::nullopt}};
+    } else if (name->source == "character") {
+      proc.u = parser::IntrinsicTypeSpec{
+          parser::IntrinsicTypeSpec::Character{std::nullopt}};
+    } else if (name->source == "logical") {
+      proc.u = parser::IntrinsicTypeSpec{
+          parser::IntrinsicTypeSpec::Logical{std::nullopt}};
+    } else if (name->source == "doublecomplex") {
+      proc.u =
+          parser::IntrinsicTypeSpec{parser::IntrinsicTypeSpec::DoubleComplex{}};
+    } else if (name->source == "ncharacter") {
+      proc.u = parser::IntrinsicTypeSpec{
+          parser::IntrinsicTypeSpec::NCharacter{std::nullopt}};
+    } else {
+      // TODO pmk: allow intrinsic function names from Table 16.2.
+    }
+  }
+  return true;
+}
 void DeclarationVisitor::Post(const parser::ProcInterface &x) {
   if (auto *name{std::get_if<parser::Name>(&x.u)}) {
     interfaceName_ = name;
@@ -2997,11 +3055,14 @@ void DeclarationVisitor::Post(const parser::ProcInterface &x) {
 void DeclarationVisitor::Post(const parser::ProcDecl &x) {
   ProcInterface interface;
   if (interfaceName_) {
-    if (auto *symbol{FindExplicitInterface(*interfaceName_)}) {
+    if (const Symbol * symbol{FindExplicitInterface(*interfaceName_)}) {
       interface.set_symbol(*symbol);
     }
-  } else if (auto *type{GetDeclTypeSpec()}) {
-    interface.set_type(*type);
+  }
+  if (interface.symbol() == nullptr) {
+    if (auto *type{GetDeclTypeSpec()}) {
+      interface.set_type(*type);
+    }
   }
   auto attrs{GetAttrs()};
   if (currScope().kind() != Scope::Kind::DerivedType) {
